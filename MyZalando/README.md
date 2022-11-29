@@ -1,8 +1,9 @@
 # Fashion-MNIST
 
 Bitte zuerst die beiden Dateien
-- x
-- y
+- x_train.csv
+- y_train.csv
+
 in das Unterverzeichnis *data* verschieben!
 
 [![GitHub stars](https://img.shields.io/github/stars/zalandoresearch/fashion-mnist.svg?style=flat&label=Star)](https://github.com/zalandoresearch/fashion-mnist/)
