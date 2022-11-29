@@ -1,7 +1,7 @@
 # Fashion-MNIST
 
 Bitte zuerst die beiden Dateien
-- x_train.csv
+- X_train.csv.zip
 - y_train.csv
 
 in das Unterverzeichnis *data* verschieben!
