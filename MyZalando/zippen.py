@@ -10,5 +10,5 @@ from shutil import unpack_archive as unpack
 def zip_entpacken (csv_name, dir_name):
     filename = dir_name + "/" + csv_name + ".zip"
     unpack(filename, dir_name)
-    data_file = open (dir_name + "/" + csv_name, "r")
+    data_file = open (dir_name + "/" + csv_name + ".csv", "r")
     return data_file.readlines()
