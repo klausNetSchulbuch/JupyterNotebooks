@@ -10,3 +10,4 @@ jupyter_contrib_nbextensions
 seaborn
 scikit-image
 scikit-learn
+networkx
