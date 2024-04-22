@@ -217,7 +217,7 @@ def find_all_splits(data, target):
         value_set = np.sort(data[current_attribute].dropna().unique())                                                      
         
         for i in range(len(value_set) - 1):
-            current_bound = (value_set[i] + value_set[i+1]) / 2
+            current_bound = value_set[i]
             split_values = ['≤' + str(round(current_bound,2)), '>' + str(round(current_bound,2)) ]
             current_split = split(current_attribute, split_values, 'numerical', current_bound) 
             list_of_splits.append(current_split)        
@@ -356,6 +356,7 @@ class DecisionTree:
         self.target = target
         self.data = data
 
+
         if (not self.data.empty) and (self.target != None):
             self.target_values = self.data[self.target].value_counts().sort_index().index.tolist()
             self.return_leaf_node(self.data, self.target)
@@ -376,7 +377,7 @@ class DecisionTree:
         
         pass
     
-    def grow_tree(self, data = pd.DataFrame(), target = None, crit = 'entropy', max_depth = float('inf'), act_depth = 0, min_gain = 0, min_leaf_cases=0):
+    def grow_tree(self, data = pd.DataFrame(), target = None, crit = 'misclassification_error', max_depth = float('inf'), act_depth = 0, min_gain = 0, min_leaf_cases=0):
         
         if act_depth == 0:
             if target == None:
@@ -393,10 +394,8 @@ class DecisionTree:
                     return 'data is missing'
                 else:
                     data = self.data
-            else:
-                self.data = data  
-
-            self.data = data
+       
+            self.data = data.dropna(subset=[self.target]) 
             self.target_values = self.data[self.target].value_counts().sort_index().index.tolist()
 
             self.tree_edges = []
@@ -408,7 +407,7 @@ class DecisionTree:
             elif crit == 'misclassification_error':
                 self.criterion = information_gain_ME
             else:
-            	self.criterion = information_gain
+            	self.criterion = information_gain_ME
 
         attributes = (data.columns).drop(target)
         #print('loading...')
@@ -648,7 +647,7 @@ class DecisionTree:
 
     
     
-    def prediction_accuracy(self, data, detailed = False):
+    def prediction_accuracy(self, data, detailed = False , conf_mat = False, conf_mat_row_perc = False, conf_mat_col_perc = False ):
         #print('loading...')
         data = data.dropna(subset=[self.target]).reset_index(drop=True)
         targets = data[self.target]
@@ -665,10 +664,9 @@ class DecisionTree:
 
         accuracy = (predictions == targets).mean()
         
-        if not detailed == True:
-            return accuracy
+     
         
-        else:
+        if conf_mat or conf_mat_row_perc or conf_mat_col_perc or detailed:
             #Berechne Fehler verschiedener Art und gebe in crosstable aus
             df_evaluation = pd.concat([targets, predictions], axis = 1)
 
@@ -690,12 +688,39 @@ class DecisionTree:
                     df_crosstable_rel1[j][i] = current_rate1
                     df_crosstable_rel2[i][j] = current_rate2
                     df_crosstable_abs[j][i] = current_sum
+            if conf_mat:
+             	display(df_crosstable_abs)
+            if conf_mat_row_perc: 
+             	display(df_crosstable_rel1)
+            if conf_mat_col_perc:
+             	display(df_crosstable_rel2)
+            if detailed:
+            	display(df_crosstable_abs)
+            	display(df_crosstable_rel1)
+            	display(df_crosstable_rel2)
 
-            display(df_crosstable_abs, df_crosstable_rel1, df_crosstable_rel2)
-
-            #return [df_crosstable_rel, df_crosstable_abs]
+        return accuracy
         
         pass
+
+    def calculate_errors(self, data):
+      
+        data = data.dropna(subset=[self.target])
+        targets = data[self.target]
+
+        prediction_list = []
+        
+        #berechne alle outputs/predictions
+        for i in data.index:
+            prediction_list.append(self.query(data.loc[i]))
+
+        predictions = pd.Series(prediction_list, name = 'prediction')
+        predictions.index = targets.index
+        
+
+        errors = (predictions != targets).sum()
+        
+        return errors
 
     def prediction_data(self, data, node_nr = 1, list_subsets = []):
         #gibt eine Liste mit allen finalen Teildatensätzen und deren Predictions zurück
@@ -760,7 +785,7 @@ class DecisionTree:
 
         return accuracy
 
-    def evaluate_fairness(self, data, fairness_attribute,detailed = False):
+    def evaluate_fairness(self, data, fairness_attribute, detailed = False):
     	subsets = apply_split(data, split(attribute = fairness_attribute, values = data[fairness_attribute].unique(), split_type='categorical') )
 
     	for i in subsets:
@@ -957,11 +982,11 @@ class DecisionTree:
 
             self.tree_nodes[node_nr].label = attribute
             
-            if self.tree_nodes[node_nr].subset[attribute].dtype in ['float64','int64']:
+            if self.tree_nodes[node_nr].subset[attribute].dtype in ['float64','int64', int, float,'float32','int32']:
             
-                if (type(threshold) in ['float64','int64', int, float]):
+                if (type(threshold) in ['float64','int64', int, float,'float32','int32']):
 
-                    if (threshold > self.tree_nodes[node_nr].subset[attribute].min()) and (threshold < self.tree_nodes[node_nr].subset[attribute].max()):
+                    if (threshold >= self.tree_nodes[node_nr].subset[attribute].min()) and (threshold < self.tree_nodes[node_nr].subset[attribute].max()):
                         split_values = ['≤' + str(round(threshold,2)), '>' + str(round(threshold,2)) ]
                         best_split = split(attribute, split_values, 'numerical', threshold)
 
@@ -970,7 +995,7 @@ class DecisionTree:
                         #best_split = identify_best_split(self.tree_nodes[node_nr].subset, self.target, list_of_splits, self.criterion)
                         
 
-                        if (threshold <= self.tree_nodes[node_nr].subset[attribute].min()):
+                        if (threshold < self.tree_nodes[node_nr].subset[attribute].min()):
                             print('Error: Threshold value could not be used - too small \n')
                             self.tree_nodes[node_nr].type = 'leaf'
                             self.tree_nodes[node_nr].label = majority_value(self.tree_nodes[node_nr].subset, self.target)
@@ -1030,11 +1055,11 @@ class DecisionTree:
     
     def print_tree(self):
         
-        self.tree_graph = Digraph(filename = ('Tree_' + self.target))
+        self.tree_graph = Digraph(filename = ('Tree_' + str(self.target)))
         #self.tree_graph.attr(label = ('Zielvariable:' + self.target + '\n Verteilung:' + str(self.tree_nodes[1].subset[self.target].value_counts().sort_index().index.tolist())), labelloc = "t")
         self.tree_graph.attr(label = '''<<TABLE BORDER="1" CELLSPACING="2" CELLPADDING="2" BGCOLOR="lightblue">
                                             <TR>
-                                                <TD><FONT POINT-SIZE="12.0" COLOR="black">''' + self.target + '?' + '   ' + '''</FONT></TD>
+                                                <TD><FONT POINT-SIZE="12.0" COLOR="black">''' + str(self.target) + '?' + '   ' + '''</FONT></TD>
                                             </TR>
                                             <TR>
                                                 <TD><FONT  POINT-SIZE="10.0" COLOR="dimgrey">'''+ str(self.target_values) +'''</FONT></TD>
@@ -1071,7 +1096,11 @@ class DecisionTree:
                                                                     </TABLE>>''', styles['leaf'])    
 
         for current_edge in self.tree_edges:
-                self.tree_graph.edge(str(current_edge.root_nr), str(current_edge.target_nr), current_edge.label)
+                
+                if self.tree_nodes[current_edge.root_nr].split.bound == None:
+                	self.tree_graph.edge(str(current_edge.root_nr), str(current_edge.target_nr), current_edge.label, labeltooltip = current_edge.label)
+                else:
+                	self.tree_graph.edge(str(current_edge.root_nr), str(current_edge.target_nr), current_edge.label, labeltooltip = str(self.tree_nodes[current_edge.root_nr].split.bound))
 
         #self.tree_graph.view()
         return self.tree_graph
@@ -1126,7 +1155,7 @@ class DecisionTree:
             else:
                 split_info = str(None)
 
-            node_info = str(n.node_nr) + ';' + n.label + ';' + n.type + ';' + split_info
+            node_info = str(n.node_nr) + ';' + str(n.label) + ';' + n.type + ';' + split_info
             encoded_unicode = node_info.encode("utf8")
             file.write(encoded_unicode)
             file.write('\n'.encode("utf8"))
